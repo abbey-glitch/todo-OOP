@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List with Alarm</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .todo-container {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .todo-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+        .todo-item:last-child {
+            border-bottom: none;
+        }
+        .todo-text {
+            flex-grow: 1;
+        }
+        .todo-time {
+            margin: 0 10px;
+            color: #666;
+        }
+        button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .completed {
+            text-decoration: line-through;
+            color: #999;
+        }
+        .alarm-sound {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Todo List with Alarm</h1>
+    
+    <div class="todo-container">
+        <h2>Add New Todo</h2>
+        <div>
+            <input type="text" id="todoInput" placeholder="Enter task">
+            <input type="datetime-local" id="todoTime">
+            <button id="addTodo">Add</button>
+        </div>
+    </div>
+    
+    <div class="todo-container">
+        <h2>Your Todos</h2>
+        <div id="todoList"></div>
+    </div>
+
+    <audio id="alarmSound" class="alarm-sound" controls>
+        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        // Alarm sound (using a free sound from soundjay.com)
+        const alarmSound = document.getElementById('alarmSound');
+
+        // TodoItem class representing a single todo item
+        class TodoItem {
+            constructor(text, time) {
+                this.id = Date.now();
+                this.text = text;
+                this.time = new Date(time);
+                this.completed = false;
+            }
+
+            // Check if the todo's time has arrived
+            checkAlarm() {
+                const now = new Date();
+                return !this.completed && this.time <= now;
+            }
+
+            // Mark as completed
+            complete() {
+                this.completed = true;
+            }
+
+            // Create HTML element for this todo
+            render() {
+                const todoElement = document.createElement('div');
+                todoElement.className = 'todo-item';
+                todoElement.dataset.id = this.id;
+
+                const todoText = document.createElement('span');
+                todoText.className = 'todo-text';
+                todoText.textContent = this.text;
+                if (this.completed) {
+                    todoText.classList.add('completed');
+                }
+
+                const todoTime = document.createElement('span');
+                todoTime.className = 'todo-time';
+                todoTime.textContent = this.time.toLocaleString();
+
+                const completeButton = document.createElement('button');
+                completeButton.textContent = this.completed ? 'Undo' : 'Complete';
+                completeButton.addEventListener('click', () => {
+                    this.completed = !this.completed;
+                    this.updateElement(todoElement);
+                });
+
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.addEventListener('click', () => {
+                    TodoList.instance.removeTodo(this.id);
+                });
+
+                todoElement.appendChild(todoText);
+                todoElement.appendChild(todoTime);
+                todoElement.appendChild(completeButton);
+                todoElement.appendChild(deleteButton);
+
+                return todoElement;
+            }
+
+            // Update the HTML element when todo changes
+            updateElement(element) {
+                const textElement = element.querySelector('.todo-text');
+                const button = element.querySelector('button:first-of-type');
+                
+                textElement.classList.toggle('completed', this.completed);
+                button.textContent = this.completed ? 'Undo' : 'Complete';
+            }
+        }
+
+        // TodoList class managing the collection of todos
+        class TodoList {
+            static instance = null;
+            
+            constructor() {
+                if (TodoList.instance) {
+                    return TodoList.instance;
+                }
+                TodoList.instance = this;
+                
+                this.todos = [];
+                this.alarmCheckInterval = null;
+                this.init();
+            }
+
+            init() {
+                // Load todos from localStorage
+                this.loadTodos();
+                
+                // Set up event listeners
+                document.getElementById('addTodo').addEventListener('click', () => this.addTodo());
+                
+                // Start checking for alarms
+                this.startAlarmCheck();
+            }
+
+            addTodo() {
+                const input = document.getElementById('todoInput');
+                const timeInput = document.getElementById('todoTime');
+                
+                if (!input.value.trim() || !timeInput.value) {
+                    alert('Please enter both task and time');
+                    return;
+                }
+
+                const todo = new TodoItem(input.value.trim(), timeInput.value);
+                this.todos.push(todo);
+                this.renderTodos();
+                this.saveTodos();
+                
+                // Clear inputs
+                input.value = '';
+                timeInput.value = '';
+            }
+
+            removeTodo(id) {
+                this.todos = this.todos.filter(todo => todo.id !== id);
+                this.renderTodos();
+                this.saveTodos();
+            }
+
+            renderTodos() {
+                const todoListElement = document.getElementById('todoList');
+                todoListElement.innerHTML = '';
+                
+                // Sort todos by time (soonest first)
+                this.todos.sort((a, b) => a.time - b.time);
+                
+                this.todos.forEach(todo => {
+                    todoListElement.appendChild(todo.render());
+                });
+            }
+
+            startAlarmCheck() {
+                // Check every second for todos that need to alarm
+                this.alarmCheckInterval = setInterval(() => {
+                    const now = new Date();
+                    const activeAlarms = this.todos.filter(todo => todo.checkAlarm());
+                    
+                    if (activeAlarms.length > 0) {
+                        this.triggerAlarm(activeAlarms);
+                    }
+                }, 1000);
+            }
+
+            triggerAlarm(todos) {
+                // Play alarm sound
+                alarmSound.play();
+                
+                // Show alert for each todo that needs attention
+                todos.forEach(todo => {
+                    if (confirm(`ALARM: It's time for "${todo.text}"!\nMark as completed?`)) {
+                        todo.complete();
+                        this.renderTodos();
+                        this.saveTodos();
+                    }
+                });
+            }
+
+            saveTodos() {
+                localStorage.setItem('todos', JSON.stringify(this.todos.map(todo => ({
+                    id: todo.id,
+                    text: todo.text,
+                    time: todo.time.toISOString(),
+                    completed: todo.completed
+                }))));
+            }
+
+            loadTodos() {
+                const savedTodos = localStorage.getItem('todos');
+                if (savedTodos) {
+                    this.todos = JSON.parse(savedTodos).map(todoData => {
+                        const todo = new TodoItem(todoData.text, todoData.time);
+                        todo.id = todoData.id;
+                        todo.completed = todoData.completed;
+                        return todo;
+                    });
+                    this.renderTodos();
+                }
+            }
+        }
+
+        // Initialize the TodoList when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new TodoList();
+        });
+    </script>
+</body>
+</html>
