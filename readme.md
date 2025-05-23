@@ -1,3 +1,6 @@
+[![Deploy static content to Pages](https://github.com/abbey-glitch/todo-OOP/actions/workflows/static.yml/badge.svg)](https://github.com/abbey-glitch/todo-OOP/actions/workflows/static.yml)
+
+
 *Overview*
 A simple yet functional Todo List application with alarm functionality built using Object-Oriented Programming in JavaScript. The app allows users to add tasks with specific due times and notifies them with an alarm sound when tasks are due.
 
